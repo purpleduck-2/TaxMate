@@ -1,100 +1,163 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Users,
-  FileText,
-  Calendar,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  DollarSign,
-  BarChart3,
-} from "lucide-react"
+import { Users, FileText, Calendar, TrendingUp, CheckCircle, DollarSign } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+
+interface DashboardStats {
+  totalClients: number
+  activeClients: number
+  sptCompleted: number
+  totalRevenue: number
+  complianceRate: number
+}
+
+interface UpcomingDeadline {
+  client: string
+  task: string
+  deadline: string
+  status: string
+  daysLeft: number
+}
 
 export default function Dashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState("monthly")
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClients: 0,
+    activeClients: 0,
+    sptCompleted: 0,
+    totalRevenue: 0,
+    complianceRate: 0,
+  })
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<UpcomingDeadline[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const stats = [
+  useEffect(() => {
+    fetchDashboardData()
+  }, [selectedPeriod])
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      // Get date range based on selected period
+      const now = new Date()
+      let startDate: Date
+
+      switch (selectedPeriod) {
+        case "daily":
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          break
+        case "yearly":
+          startDate = new Date(now.getFullYear(), 0, 1)
+          break
+        default: // monthly
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      }
+
+      // Fetch clients data
+      const { data: clients } = await supabase.from("clients").select("*")
+
+      // Fetch SPT records for the period
+      const { data: sptRecords } = await supabase
+        .from("spt_records")
+        .select("*, clients(name)")
+        .gte("created_at", startDate.toISOString())
+
+      // Calculate stats
+      const totalClients = clients?.length || 0
+      const activeClients = clients?.filter((c) => c.status === "Aktif").length || 0
+      const sptCompleted = sptRecords?.filter((s) => s.status === "Approved").length || 0
+      const totalRevenue = sptRecords?.reduce((sum, record) => sum + (record.amount || 0), 0) || 0
+      const complianceRate = totalClients > 0 ? (activeClients / totalClients) * 100 : 0
+
+      setStats({
+        totalClients,
+        activeClients,
+        sptCompleted,
+        totalRevenue,
+        complianceRate,
+      })
+
+      // Generate upcoming deadlines (mock data for now)
+      const mockDeadlines: UpcomingDeadline[] = [
+        {
+          client: clients?.[0]?.name || "PT Teknologi Maju",
+          task: "SPT Masa PPh 23",
+          deadline: "2025-07-15",
+          status: "urgent",
+          daysLeft: 7,
+        },
+        {
+          client: clients?.[1]?.name || "CV Berkah Jaya",
+          task: "SPT Masa PPN",
+          deadline: "2025-07-31",
+          status: "warning",
+          daysLeft: 23,
+        },
+      ]
+      setUpcomingDeadlines(mockDeadlines)
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount)
+  }
+
+  const statsData = [
     {
       title: "Total Klien",
-      value: "248",
+      value: stats.totalClients.toString(),
       change: "+12%",
       icon: Users,
       color: "text-blue-600",
     },
     {
       title: "SPT Selesai",
-      value: "156",
+      value: stats.sptCompleted.toString(),
       change: "+8%",
       icon: FileText,
       color: "text-green-600",
     },
     {
-      title: "Pendapatan Bulan Ini",
-      value: "Rp 125.5M",
+      title: "Pendapatan",
+      value: formatCurrency(stats.totalRevenue),
       change: "+15%",
       icon: DollarSign,
       color: "text-purple-600",
     },
     {
       title: "Tingkat Kepatuhan",
-      value: "98.5%",
+      value: `${stats.complianceRate.toFixed(1)}%`,
       change: "+2%",
       icon: CheckCircle,
       color: "text-emerald-600",
     },
   ]
 
-  const upcomingDeadlines = [
-    {
-      client: "PT Maju Bersama",
-      task: "SPT Masa PPh 23",
-      deadline: "15 Juli 2025",
-      status: "urgent",
-      daysLeft: 7,
-    },
-    {
-      client: "CV Sukses Mandiri",
-      task: "SPT Masa PPN",
-      deadline: "31 Juli 2025",
-      status: "warning",
-      daysLeft: 23,
-    },
-    {
-      client: "PT Digital Nusantara",
-      task: "PPh 21 Bulanan",
-      deadline: "10 Agustus 2025",
-      status: "normal",
-      daysLeft: 33,
-    },
-  ]
-
-  const recentActivities = [
-    {
-      action: "SPT PPh 21 disubmit",
-      client: "PT Teknologi Maju",
-      time: "2 jam lalu",
-      status: "completed",
-    },
-    {
-      action: "Dokumen diunggah",
-      client: "CV Berkah Jaya",
-      time: "4 jam lalu",
-      status: "pending",
-    },
-    {
-      action: "Konsultasi dijadwalkan",
-      client: "PT Inovasi Digital",
-      time: "6 jam lalu",
-      status: "scheduled",
-    },
-  ]
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Loading dashboard...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -131,7 +194,7 @@ export default function Dashboard() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => {
+        {statsData.map((stat, index) => {
           const Icon = stat.icon
           return (
             <Card key={index}>
@@ -142,7 +205,7 @@ export default function Dashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-green-600">{stat.change}</span> dari bulan lalu
+                  <span className="text-green-600">{stat.change}</span> dari periode sebelumnya
                 </p>
               </CardContent>
             </Card>
@@ -184,41 +247,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Recent Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Aktivitas Terbaru
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3">
-                  <div
-                    className={`w-2 h-2 rounded-full mt-2 ${
-                      activity.status === "completed"
-                        ? "bg-green-500"
-                        : activity.status === "pending"
-                          ? "bg-yellow-500"
-                          : "bg-blue-500"
-                    }`}
-                  />
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">{activity.action}</p>
-                    <p className="text-xs text-muted-foreground">{activity.client}</p>
-                    <p className="text-xs text-muted-foreground">{activity.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Performance Overview */}
-      <div className="grid gap-6 md:grid-cols-2">
+        {/* Performance Overview */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -248,41 +277,6 @@ export default function Dashboard() {
                 <span>92%</span>
               </div>
               <Progress value={92} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              Peringatan Sistem
-            </CardTitle>
-            <CardDescription>Notifikasi penting yang memerlukan perhatian</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <div>
-                  <p className="text-sm font-medium text-red-800">3 SPT mendekati deadline</p>
-                  <p className="text-xs text-red-600">Perlu tindakan segera</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <Clock className="h-4 w-4 text-yellow-600" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800">Update regulasi tersedia</p>
-                  <p className="text-xs text-yellow-600">Peraturan DJP terbaru</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <BarChart3 className="h-4 w-4 text-blue-600" />
-                <div>
-                  <p className="text-sm font-medium text-blue-800">Laporan bulanan siap</p>
-                  <p className="text-xs text-blue-600">Review performa Juli 2025</p>
-                </div>
-              </div>
             </div>
           </CardContent>
         </Card>

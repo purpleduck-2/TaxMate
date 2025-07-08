@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,112 +20,145 @@ import {
   Folder,
   Calendar,
   User,
+  Edit,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { supabase } from "@/lib/supabase"
+import { DocumentUploadDialog } from "@/components/document-upload-dialog"
+import type { Database } from "@/lib/supabase"
 
-const documents = [
-  {
-    id: 1,
-    name: "SPT Masa PPh 21 - Juni 2025.pdf",
-    client: "PT Teknologi Maju",
-    type: "SPT Masa",
-    category: "PPh 21",
-    size: "2.4 MB",
-    uploadDate: "2025-07-05",
-    uploadedBy: "Ahmad Wijaya",
-    status: "Final",
-    fileType: "pdf",
-  },
-  {
-    id: 2,
-    name: "Bukti Potong PPh 23 - CV Berkah.pdf",
-    client: "CV Berkah Jaya",
-    type: "Bukti Potong",
-    category: "PPh 23",
-    size: "1.8 MB",
-    uploadDate: "2025-07-04",
-    uploadedBy: "Siti Rahayu",
-    status: "Draft",
-    fileType: "pdf",
-  },
-  {
-    id: 3,
-    name: "Faktur Pajak Masukan - Juni.xlsx",
-    client: "PT Digital Nusantara",
-    type: "Faktur Pajak",
-    category: "PPN",
-    size: "856 KB",
-    uploadDate: "2025-07-03",
-    uploadedBy: "Budi Santoso",
-    status: "Review",
-    fileType: "excel",
-  },
-  {
-    id: 4,
-    name: "Laporan Keuangan Q2 2025.pdf",
-    client: "Ahmad Wijaya",
-    type: "Laporan Keuangan",
-    category: "Supporting",
-    size: "3.2 MB",
-    uploadDate: "2025-07-02",
-    uploadedBy: "Maria Gonzalez",
-    status: "Final",
-    fileType: "pdf",
-  },
-  {
-    id: 5,
-    name: "NPWP Scan.jpg",
-    client: "PT Maju Bersama",
-    type: "Dokumen Legal",
-    category: "Identitas",
-    size: "1.2 MB",
-    uploadDate: "2025-07-01",
-    uploadedBy: "Ahmad Wijaya",
-    status: "Final",
-    fileType: "image",
-  },
-]
-
-const documentStats = [
-  {
-    title: "Total Dokumen",
-    value: "1,247",
-    change: "+23 hari ini",
-    icon: FileText,
-  },
-  {
-    title: "Menunggu Review",
-    value: "45",
-    change: "12 urgent",
-    icon: Eye,
-  },
-  {
-    title: "Storage Terpakai",
-    value: "2.8 GB",
-    change: "dari 10 GB",
-    icon: Folder,
-  },
-  {
-    title: "Upload Hari Ini",
-    value: "23",
-    change: "+15% dari kemarin",
-    icon: Upload,
-  },
-]
+type Document = Database["public"]["Tables"]["documents"]["Row"] & {
+  clients?: { name: string }
+}
 
 export default function DocumentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
 
-  const getFileIcon = (fileType: string) => {
-    switch (fileType) {
+  // Dialog states
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+
+  useEffect(() => {
+    fetchDocuments()
+  }, [])
+
+  useEffect(() => {
+    filterDocuments()
+  }, [documents, searchTerm, categoryFilter, statusFilter])
+
+  const fetchDocuments = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("documents")
+        .select(`
+          *,
+          clients (
+            name
+          )
+        `)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      setDocuments(data || [])
+    } catch (error) {
+      console.error("Error fetching documents:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterDocuments = () => {
+    let filtered = documents
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (doc) =>
+          doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.clients?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          doc.type.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    // Category filter
+    if (categoryFilter !== "all") {
+      filtered = filtered.filter((doc) => doc.category.toLowerCase() === categoryFilter.toLowerCase())
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((doc) => doc.status.toLowerCase() === statusFilter.toLowerCase())
+    }
+
+    setFilteredDocuments(filtered)
+  }
+
+  const handleUploadDocument = () => {
+    setSelectedDocument(null)
+    setUploadDialogOpen(true)
+  }
+
+  const handleEditDocument = (document: Document) => {
+    setSelectedDocument(document)
+    setUploadDialogOpen(true)
+  }
+
+  const handleDownloadDocument = async (document: Document) => {
+    try {
+      const { data, error } = await supabase.storage.from("documents").download(document.file_path)
+
+      if (error) throw error
+
+      // Create download link
+      const url = URL.createObjectURL(data)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = document.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Error downloading document:", error)
+      alert("Terjadi kesalahan saat mengunduh dokumen")
+    }
+  }
+
+  const handleViewDocument = async (document: Document) => {
+    try {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(document.file_path, 3600) // 1 hour expiry
+
+      if (error) throw error
+
+      // Open in new tab
+      window.open(data.signedUrl, "_blank")
+    } catch (error) {
+      console.error("Error viewing document:", error)
+      alert("Terjadi kesalahan saat membuka dokumen")
+    }
+  }
+
+  const getFileIcon = (fileName: string) => {
+    const extension = fileName.split(".").pop()?.toLowerCase()
+    switch (extension) {
       case "pdf":
         return <FileText className="h-4 w-4 text-red-600" />
-      case "excel":
+      case "doc":
+      case "docx":
+        return <File className="h-4 w-4 text-blue-600" />
+      case "xls":
+      case "xlsx":
         return <File className="h-4 w-4 text-green-600" />
-      case "image":
-        return <ImageIcon className="h-4 w-4 text-blue-600" />
+      case "jpg":
+      case "jpeg":
+      case "png":
+        return <ImageIcon className="h-4 w-4 text-purple-600" />
       default:
         return <File className="h-4 w-4 text-gray-600" />
     }
@@ -146,15 +179,65 @@ export default function DocumentsPage() {
     )
   }
 
-  const filteredDocuments = documents.filter((doc) => {
-    const matchesSearch =
-      doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.client.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = categoryFilter === "all" || doc.category.toLowerCase() === categoryFilter
-    const matchesStatus = statusFilter === "all" || doc.status.toLowerCase() === statusFilter
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return "0 B"
+    const sizes = ["B", "KB", "MB", "GB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`
+  }
 
-    return matchesSearch && matchesCategory && matchesStatus
-  })
+  // Calculate stats
+  const documentStats = [
+    {
+      title: "Total Dokumen",
+      value: documents.length.toString(),
+      change: `${
+        documents.filter((d) => {
+          const today = new Date()
+          const docDate = new Date(d.created_at)
+          return docDate.toDateString() === today.toDateString()
+        }).length
+      } hari ini`,
+      icon: FileText,
+    },
+    {
+      title: "Menunggu Review",
+      value: documents.filter((d) => d.status === "Review").length.toString(),
+      change: `${documents.filter((d) => d.status === "Review" && d.category === "PPh 21").length} urgent`,
+      icon: Eye,
+    },
+    {
+      title: "Storage Terpakai",
+      value: formatFileSize(documents.reduce((sum, doc) => sum + (doc.file_size || 0), 0)),
+      change: "dari unlimited",
+      icon: Folder,
+    },
+    {
+      title: "Upload Hari Ini",
+      value: documents
+        .filter((d) => {
+          const today = new Date()
+          const docDate = new Date(d.created_at)
+          return docDate.toDateString() === today.toDateString()
+        })
+        .length.toString(),
+      change: "dokumen baru",
+      icon: Upload,
+    },
+  ]
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Loading documents...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -164,7 +247,7 @@ export default function DocumentsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Manajemen Dokumen</h1>
           <p className="text-muted-foreground">Kelola semua dokumen pajak dan supporting documents</p>
         </div>
-        <Button>
+        <Button onClick={handleUploadDocument}>
           <Upload className="mr-2 h-4 w-4" />
           Upload Dokumen
         </Button>
@@ -218,6 +301,7 @@ export default function DocumentsPage() {
                 <SelectItem value="ppn">PPN</SelectItem>
                 <SelectItem value="supporting">Supporting</SelectItem>
                 <SelectItem value="identitas">Identitas</SelectItem>
+                <SelectItem value="legal">Legal</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -255,16 +339,16 @@ export default function DocumentsPage() {
                   <TableRow key={doc.id}>
                     <TableCell>
                       <div className="flex items-center space-x-3">
-                        {getFileIcon(doc.fileType)}
+                        {getFileIcon(doc.name)}
                         <div>
                           <p className="font-medium">{doc.name}</p>
-                          <p className="text-sm text-muted-foreground">{doc.size}</p>
+                          <p className="text-sm text-muted-foreground">{formatFileSize(doc.file_size)}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
-                        <p className="font-medium">{doc.client}</p>
+                        <p className="font-medium">{doc.clients?.name || "Unknown Client"}</p>
                         <Badge variant="outline" className="text-xs">
                           {doc.type}
                         </Badge>
@@ -278,12 +362,14 @@ export default function DocumentsPage() {
                       <div className="space-y-1">
                         <div className="flex items-center text-sm">
                           <Calendar className="mr-2 h-3 w-3" />
-                          {new Date(doc.uploadDate).toLocaleDateString("id-ID")}
+                          {new Date(doc.created_at).toLocaleDateString("id-ID")}
                         </div>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <User className="mr-2 h-3 w-3" />
-                          {doc.uploadedBy}
-                        </div>
+                        {doc.uploaded_by && (
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <User className="mr-2 h-3 w-3" />
+                            {doc.uploaded_by}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -294,16 +380,16 @@ export default function DocumentsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewDocument(doc)}>
                             <Eye className="mr-2 h-4 w-4" />
                             Lihat
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownloadDocument(doc)}>
                             <Download className="mr-2 h-4 w-4" />
                             Download
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <FileText className="mr-2 h-4 w-4" />
+                          <DropdownMenuItem onClick={() => handleEditDocument(doc)}>
+                            <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -314,8 +400,24 @@ export default function DocumentsPage() {
               </TableBody>
             </Table>
           </div>
+
+          {filteredDocuments.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchTerm || categoryFilter !== "all" || statusFilter !== "all"
+                ? "Tidak ada dokumen yang sesuai dengan filter"
+                : "Belum ada dokumen yang diupload"}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Upload Dialog */}
+      <DocumentUploadDialog
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        document={selectedDocument}
+        onSuccess={fetchDocuments}
+      />
     </div>
   )
 }

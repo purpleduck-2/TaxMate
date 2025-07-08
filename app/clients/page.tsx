@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,77 +21,95 @@ import {
   MoreHorizontal,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { supabase } from "@/lib/supabase"
+import { ClientDialog } from "@/components/client-dialog"
+import { ClientDetailDialog } from "@/components/client-detail-dialog"
+import { ConsultationDialog } from "@/components/consultation-dialog"
+import type { Database } from "@/lib/supabase"
 
-const clients = [
-  {
-    id: 1,
-    name: "PT Teknologi Maju",
-    type: "Perusahaan",
-    npwp: "01.234.567.8-901.000",
-    contact: "Budi Santoso",
-    phone: "+62 21 1234567",
-    email: "budi@teknologimaju.com",
-    address: "Jakarta Selatan",
-    status: "Aktif",
-    lastActivity: "2 hari lalu",
-    services: ["PPh Badan", "PPN", "PPh 21"],
-  },
-  {
-    id: 2,
-    name: "CV Berkah Jaya",
-    type: "CV",
-    npwp: "02.345.678.9-012.000",
-    contact: "Siti Rahayu",
-    phone: "+62 21 2345678",
-    email: "siti@berkahjaya.com",
-    address: "Jakarta Timur",
-    status: "Aktif",
-    lastActivity: "1 minggu lalu",
-    services: ["PPh Final", "PPN"],
-  },
-  {
-    id: 3,
-    name: "Ahmad Wijaya",
-    type: "Perorangan",
-    npwp: "03.456.789.0-123.000",
-    contact: "Ahmad Wijaya",
-    phone: "+62 812 3456789",
-    email: "ahmad.wijaya@email.com",
-    address: "Depok",
-    status: "Aktif",
-    lastActivity: "3 hari lalu",
-    services: ["PPh OP"],
-  },
-  {
-    id: 4,
-    name: "PT Digital Nusantara",
-    type: "Perusahaan",
-    npwp: "04.567.890.1-234.000",
-    contact: "Maria Gonzalez",
-    phone: "+62 21 3456789",
-    email: "maria@digitalnusantara.com",
-    address: "Jakarta Pusat",
-    status: "Tidak Aktif",
-    lastActivity: "1 bulan lalu",
-    services: ["PPh Badan", "PPN", "PPh 21", "PPh 23"],
-  },
-]
+type Client = Database["public"]["Tables"]["clients"]["Row"]
 
 export default function ClientsPage() {
+  const [clients, setClients] = useState<Client[]>([])
+  const [filteredClients, setFilteredClients] = useState<Client[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
 
-  const filteredClients = clients.filter((client) => {
-    const matchesSearch =
-      client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.npwp.includes(searchTerm) ||
-      client.contact.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || client.status.toLowerCase() === statusFilter
-    const matchesType = typeFilter === "all" || client.type.toLowerCase() === typeFilter.toLowerCase()
+  // Dialog states
+  const [clientDialogOpen, setClientDialogOpen] = useState(false)
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+  const [consultationDialogOpen, setConsultationDialogOpen] = useState(false)
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
 
-    return matchesSearch && matchesStatus && matchesType
-  })
+  useEffect(() => {
+    fetchClients()
+  }, [])
+
+  useEffect(() => {
+    filterClients()
+  }, [clients, searchTerm, statusFilter, typeFilter])
+
+  const fetchClients = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.from("clients").select("*").order("created_at", { ascending: false })
+
+      if (error) throw error
+      setClients(data || [])
+    } catch (error) {
+      console.error("Error fetching clients:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterClients = () => {
+    let filtered = clients
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (client) =>
+          client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          client.npwp.includes(searchTerm) ||
+          client.contact_person.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((client) => client.status.toLowerCase() === statusFilter.toLowerCase())
+    }
+
+    // Type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter((client) => client.type.toLowerCase() === typeFilter.toLowerCase())
+    }
+
+    setFilteredClients(filtered)
+  }
+
+  const handleAddClient = () => {
+    setSelectedClient(null)
+    setClientDialogOpen(true)
+  }
+
+  const handleEditClient = (client: Client) => {
+    setSelectedClient(client)
+    setClientDialogOpen(true)
+  }
+
+  const handleViewDetail = (client: Client) => {
+    setSelectedClient(client)
+    setDetailDialogOpen(true)
+  }
+
+  const handleViewConsultations = (client: Client) => {
+    setSelectedClient(client)
+    setConsultationDialogOpen(true)
+  }
 
   const getStatusBadge = (status: string) => {
     return status === "Aktif" ? (
@@ -116,6 +134,19 @@ export default function ClientsPage() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Loading clients...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -124,7 +155,7 @@ export default function ClientsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Manajemen Klien</h1>
           <p className="text-muted-foreground">Kelola informasi dan layanan untuk semua klien Anda</p>
         </div>
-        <Button>
+        <Button onClick={handleAddClient}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Klien
         </Button>
@@ -139,7 +170,7 @@ export default function ClientsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{clients.length}</div>
-            <p className="text-xs text-muted-foreground">+2 klien baru bulan ini</p>
+            <p className="text-xs text-muted-foreground">Total klien terdaftar</p>
           </CardContent>
         </Card>
         <Card>
@@ -150,7 +181,10 @@ export default function ClientsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{clients.filter((c) => c.status === "Aktif").length}</div>
             <p className="text-xs text-muted-foreground">
-              {Math.round((clients.filter((c) => c.status === "Aktif").length / clients.length) * 100)}% dari total
+              {clients.length > 0
+                ? Math.round((clients.filter((c) => c.status === "Aktif").length / clients.length) * 100)
+                : 0}
+              % dari total
             </p>
           </CardContent>
         </Card>
@@ -229,7 +263,7 @@ export default function ClientsPage() {
                   <TableHead>Kontak</TableHead>
                   <TableHead>Layanan</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Aktivitas Terakhir</TableHead>
+                  <TableHead>Dibuat</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -243,42 +277,52 @@ export default function ClientsPage() {
                           {getTypeBadge(client.type)}
                         </div>
                         <p className="text-sm text-muted-foreground">{client.npwp}</p>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <MapPin className="mr-1 h-3 w-3" />
-                          {client.address}
-                        </div>
+                        {client.address && (
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <MapPin className="mr-1 h-3 w-3" />
+                            {client.address}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <div className="flex items-center text-sm">
                           <User className="mr-2 h-3 w-3" />
-                          {client.contact}
+                          {client.contact_person}
                         </div>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Phone className="mr-2 h-3 w-3" />
-                          {client.phone}
-                        </div>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Mail className="mr-2 h-3 w-3" />
-                          {client.email}
-                        </div>
+                        {client.phone && (
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Phone className="mr-2 h-3 w-3" />
+                            {client.phone}
+                          </div>
+                        )}
+                        {client.email && (
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Mail className="mr-2 h-3 w-3" />
+                            {client.email}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {client.services.map((service, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {service}
-                          </Badge>
-                        ))}
+                        {client.services && client.services.length > 0 ? (
+                          client.services.map((service, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {service}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(client.status)}</TableCell>
                     <TableCell>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <Calendar className="mr-2 h-3 w-3" />
-                        {client.lastActivity}
+                        {new Date(client.created_at).toLocaleDateString("id-ID")}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -289,15 +333,15 @@ export default function ClientsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewDetail(client)}>
                             <FileText className="mr-2 h-4 w-4" />
                             Lihat Detail
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditClient(client)}>
                             <User className="mr-2 h-4 w-4" />
                             Edit Klien
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewConsultations(client)}>
                             <Calendar className="mr-2 h-4 w-4" />
                             Jadwal Konsultasi
                           </DropdownMenuItem>
@@ -309,8 +353,32 @@ export default function ClientsPage() {
               </TableBody>
             </Table>
           </div>
+
+          {filteredClients.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              {searchTerm || statusFilter !== "all" || typeFilter !== "all"
+                ? "Tidak ada klien yang sesuai dengan filter"
+                : "Belum ada klien yang terdaftar"}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Dialogs */}
+      <ClientDialog
+        open={clientDialogOpen}
+        onOpenChange={setClientDialogOpen}
+        client={selectedClient}
+        onSuccess={fetchClients}
+      />
+
+      <ClientDetailDialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen} client={selectedClient} />
+
+      <ConsultationDialog
+        open={consultationDialogOpen}
+        onOpenChange={setConsultationDialogOpen}
+        client={selectedClient}
+      />
     </div>
   )
 }

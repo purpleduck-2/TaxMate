@@ -15,13 +15,10 @@ import {
   BarChart3,
   MessageSquare,
   Receipt,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Building2,
   Workflow,
-  Shield,
-  HelpCircle,
 } from "lucide-react"
 
 const navigation = [
@@ -77,24 +74,6 @@ const navigation = [
   },
 ]
 
-const bottomNavigation = [
-  {
-    name: "Keamanan",
-    href: "/security",
-    icon: Shield,
-  },
-  {
-    name: "Bantuan",
-    href: "/help",
-    icon: HelpCircle,
-  },
-  {
-    name: "Pengaturan",
-    href: "/settings",
-    icon: Settings,
-  },
-]
-
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
@@ -137,26 +116,6 @@ export function Sidebar() {
           })}
         </nav>
       </ScrollArea>
-
-      {/* Bottom Navigation */}
-      <div className="border-t p-3 space-y-2">
-        {bottomNavigation.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
-
-          return (
-            <Link key={item.name} href={item.href}>
-              <Button
-                variant={isActive ? "secondary" : "ghost"}
-                className={cn("w-full justify-start", collapsed && "px-2")}
-              >
-                <Icon className="h-4 w-4" />
-                {!collapsed && <span className="ml-2">{item.name}</span>}
-              </Button>
-            </Link>
-          )
-        })}
-      </div>
     </div>
   )
 }
