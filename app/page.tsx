@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Users, FileText, Calendar, TrendingUp, CheckCircle, DollarSign } from "lucide-react"
+import { Users, FileText, Calendar, TrendingUp, CheckCircle, DollarSign, Clock } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface DashboardStats {
@@ -16,12 +16,12 @@ interface DashboardStats {
   complianceRate: number
 }
 
-interface UpcomingDeadline {
-  client: string
-  task: string
-  deadline: string
+interface TodaySchedule {
+  id: string
+  title: string
+  scheduled_date: string
   status: string
-  daysLeft: number
+  clients: { name: string }
 }
 
 export default function Dashboard() {
@@ -33,7 +33,7 @@ export default function Dashboard() {
     totalRevenue: 0,
     complianceRate: 0,
   })
-  const [upcomingDeadlines, setUpcomingDeadlines] = useState<UpcomingDeadline[]>([])
+  const [todaySchedules, setTodaySchedules] = useState<TodaySchedule[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -67,6 +67,16 @@ export default function Dashboard() {
         .select("*, clients(name)")
         .gte("created_at", startDate.toISOString())
 
+      // Fetch today's schedules
+      const today = new Date().toDateString()
+      const { data: schedules } = await supabase
+        .from("schedules")
+        .select("id, title, scheduled_date, status, clients(name)")
+        .gte("scheduled_date", new Date(today).toISOString())
+        .lt("scheduled_date", new Date(new Date(today).getTime() + 24 * 60 * 60 * 1000).toISOString())
+        .order("scheduled_date", { ascending: true })
+        .limit(5)
+
       // Calculate stats
       const totalClients = clients?.length || 0
       const activeClients = clients?.filter((c) => c.status === "Aktif").length || 0
@@ -82,24 +92,7 @@ export default function Dashboard() {
         complianceRate,
       })
 
-      // Generate upcoming deadlines (mock data for now)
-      const mockDeadlines: UpcomingDeadline[] = [
-        {
-          client: clients?.[0]?.name || "PT Teknologi Maju",
-          task: "SPT Masa PPh 23",
-          deadline: "2025-07-15",
-          status: "urgent",
-          daysLeft: 7,
-        },
-        {
-          client: clients?.[1]?.name || "CV Berkah Jaya",
-          task: "SPT Masa PPN",
-          deadline: "2025-07-31",
-          status: "warning",
-          daysLeft: 23,
-        },
-      ]
-      setUpcomingDeadlines(mockDeadlines)
+      setTodaySchedules(schedules || [])
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
     } finally {
@@ -113,6 +106,21 @@ export default function Dashboard() {
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount)
+  }
+
+  const getStatusBadge = (status: string) => {
+    const config = {
+      Pending: { variant: "secondary" as const, className: "bg-yellow-100 text-yellow-800" },
+      Selesai: { variant: "default" as const, className: "bg-green-100 text-green-800" },
+      Dibatalkan: { variant: "destructive" as const },
+    }
+
+    const { variant, className } = config[status as keyof typeof config] || config["Pending"]
+    return (
+      <Badge variant={variant} className={className}>
+        {status}
+      </Badge>
+    )
   }
 
   const statsData = [
@@ -214,35 +222,39 @@ export default function Dashboard() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Upcoming Deadlines */}
+        {/* Today's Schedule */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Deadline Mendatang
+              Jadwal Hari Ini
             </CardTitle>
-            <CardDescription>Kewajiban pajak yang perlu diselesaikan segera</CardDescription>
+            <CardDescription>Jadwal dan appointment untuk hari ini</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {upcomingDeadlines.map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="space-y-1">
-                    <p className="font-medium">{item.client}</p>
-                    <p className="text-sm text-muted-foreground">{item.task}</p>
-                    <p className="text-xs text-muted-foreground">{item.deadline}</p>
+              {todaySchedules.length > 0 ? (
+                todaySchedules.map((schedule) => (
+                  <div key={schedule.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="space-y-1">
+                      <p className="font-medium">{schedule.title}</p>
+                      <p className="text-sm text-muted-foreground">{schedule.clients.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(schedule.scheduled_date).toLocaleTimeString("id-ID", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right">{getStatusBadge(schedule.status)}</div>
                   </div>
-                  <div className="text-right">
-                    <Badge
-                      variant={
-                        item.status === "urgent" ? "destructive" : item.status === "warning" ? "secondary" : "outline"
-                      }
-                    >
-                      {item.daysLeft} hari
-                    </Badge>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Tidak ada jadwal untuk hari ini</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

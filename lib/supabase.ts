@@ -169,6 +169,144 @@ export type Database = {
           updated_at?: string
         }
       }
+      workflows: {
+        Row: {
+          id: string
+          client_id: string
+          title: string
+          description: string | null
+          category: string
+          status: "Dalam Proses" | "Menunggu Review" | "Selesai"
+          priority: "Low" | "Medium" | "High"
+          assignee: string | null
+          due_date: string | null
+          progress: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          title: string
+          description?: string | null
+          category: string
+          status?: "Dalam Proses" | "Menunggu Review" | "Selesai"
+          priority?: "Low" | "Medium" | "High"
+          assignee?: string | null
+          due_date?: string | null
+          progress?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          title?: string
+          description?: string | null
+          category?: string
+          status?: "Dalam Proses" | "Menunggu Review" | "Selesai"
+          priority?: "Low" | "Medium" | "High"
+          assignee?: string | null
+          due_date?: string | null
+          progress?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      spt_forms: {
+        Row: {
+          id: string
+          client_id: string
+          title: string
+          type: string
+          period: string
+          status: "Dalam Proses" | "Review" | "Selesai"
+          amount: number | null
+          due_date: string | null
+          progress: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          title: string
+          type: string
+          period: string
+          status?: "Dalam Proses" | "Review" | "Selesai"
+          amount?: number | null
+          due_date?: string | null
+          progress?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          title?: string
+          type?: string
+          period?: string
+          status?: "Dalam Proses" | "Review" | "Selesai"
+          amount?: number | null
+          due_date?: string | null
+          progress?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      schedules: {
+        Row: {
+          id: string
+          client_id: string
+          title: string
+          description: string | null
+          type: string
+          status: "Pending" | "Selesai" | "Dibatalkan"
+          scheduled_date: string
+          duration: number | null
+          location: string | null
+          reminder_minutes: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          title: string
+          description?: string | null
+          type: string
+          status?: "Pending" | "Selesai" | "Dibatalkan"
+          scheduled_date: string
+          duration?: number | null
+          location?: string | null
+          reminder_minutes?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          title?: string
+          description?: string | null
+          type?: string
+          status?: "Pending" | "Selesai" | "Dibatalkan"
+          scheduled_date?: string
+          duration?: number | null
+          location?: string | null
+          reminder_minutes?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
   }
 }

@@ -1,175 +1,136 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Workflow, Play, Pause, CheckCircle, Clock, AlertTriangle, Users, Plus, Settings, Eye } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Workflow, CheckCircle, Clock, AlertTriangle, Plus, Settings, Eye, Edit, Download } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+import { WorkflowDialog } from "@/components/workflow-dialog"
+import { toast } from "@/hooks/use-toast"
 
-const workflowTemplates = [
-  {
-    id: "spt-pph21",
-    name: "SPT PPh 21 Workflow",
-    description: "Proses lengkap untuk SPT Masa PPh 21",
-    steps: 6,
-    estimatedTime: "2-3 hari",
-    category: "SPT Masa",
-    status: "Active",
-  },
-  {
-    id: "spt-ppn",
-    name: "SPT PPN Workflow",
-    description: "Proses lengkap untuk SPT Masa PPN",
-    steps: 8,
-    estimatedTime: "3-4 hari",
-    category: "SPT Masa",
-    status: "Active",
-  },
-  {
-    id: "audit-prep",
-    name: "Audit Preparation",
-    description: "Persiapan dokumen untuk audit pajak",
-    steps: 12,
-    estimatedTime: "1-2 minggu",
-    category: "Audit",
-    status: "Active",
-  },
-  {
-    id: "client-onboarding",
-    name: "Client Onboarding",
-    description: "Proses onboarding klien baru",
-    steps: 5,
-    estimatedTime: "1-2 hari",
-    category: "Onboarding",
-    status: "Active",
-  },
-]
-
-const activeWorkflows = [
-  {
-    id: 1,
-    client: "PT Teknologi Maju",
-    workflow: "SPT PPh 21 Workflow",
-    currentStep: "Review Dokumen",
-    progress: 60,
-    assignee: "Ahmad Wijaya",
-    dueDate: "2025-07-15",
-    status: "In Progress",
-    priority: "High",
-  },
-  {
-    id: 2,
-    client: "CV Berkah Jaya",
-    workflow: "SPT PPN Workflow",
-    currentStep: "Perhitungan Pajak",
-    progress: 40,
-    assignee: "Siti Rahayu",
-    dueDate: "2025-07-20",
-    status: "In Progress",
-    priority: "Medium",
-  },
-  {
-    id: 3,
-    client: "PT Digital Nusantara",
-    workflow: "Audit Preparation",
-    currentStep: "Kompilasi Dokumen",
-    progress: 25,
-    assignee: "Budi Santoso",
-    dueDate: "2025-07-30",
-    status: "In Progress",
-    priority: "Low",
-  },
-]
-
-const workflowSteps = [
-  {
-    id: 1,
-    name: "Pengumpulan Dokumen",
-    description: "Kumpulkan semua dokumen yang diperlukan dari klien",
-    status: "Completed",
-    assignee: "Ahmad Wijaya",
-    duration: "1 hari",
-  },
-  {
-    id: 2,
-    name: "Verifikasi Data",
-    description: "Verifikasi kelengkapan dan keakuratan data",
-    status: "Completed",
-    assignee: "Ahmad Wijaya",
-    duration: "0.5 hari",
-  },
-  {
-    id: 3,
-    name: "Review Dokumen",
-    description: "Review mendalam terhadap semua dokumen",
-    status: "In Progress",
-    assignee: "Ahmad Wijaya",
-    duration: "1 hari",
-  },
-  {
-    id: 4,
-    name: "Perhitungan Pajak",
-    description: "Hitung kewajiban pajak berdasarkan data",
-    status: "Pending",
-    assignee: "Ahmad Wijaya",
-    duration: "1 hari",
-  },
-  {
-    id: 5,
-    name: "Penyusunan SPT",
-    description: "Susun SPT berdasarkan perhitungan",
-    status: "Pending",
-    assignee: "Ahmad Wijaya",
-    duration: "0.5 hari",
-  },
-  {
-    id: 6,
-    name: "Review & Submit",
-    description: "Review final dan submit ke DJP",
-    status: "Pending",
-    assignee: "Ahmad Wijaya",
-    duration: "0.5 hari",
-  },
-]
-
-const workflowStats = [
-  {
-    title: "Active Workflows",
-    value: "24",
-    change: "+3 minggu ini",
-    icon: Workflow,
-  },
-  {
-    title: "Completed",
-    value: "156",
-    change: "bulan ini",
-    icon: CheckCircle,
-  },
-  {
-    title: "On Schedule",
-    value: "18",
-    change: "75% on time",
-    icon: Clock,
-  },
-  {
-    title: "Delayed",
-    value: "3",
-    change: "perlu perhatian",
-    icon: AlertTriangle,
-  },
-]
+interface WorkflowData {
+  id: string
+  title: string
+  description: string | null
+  category: string
+  status: "Dalam Proses" | "Menunggu Review" | "Selesai"
+  priority: "Low" | "Medium" | "High"
+  assignee: string | null
+  due_date: string | null
+  progress: number
+  created_by: string | null
+  created_at: string
+  clients: { name: string }
+}
 
 export default function WorkflowPage() {
-  const [selectedWorkflow, setSelectedWorkflow] = useState("spt-pph21")
+  const [workflows, setWorkflows] = useState<WorkflowData[]>([])
+  const [filteredWorkflows, setFilteredWorkflows] = useState<WorkflowData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowData | null>(null)
+  const [stats, setStats] = useState({
+    total: 0,
+    inProgress: 0,
+    review: 0,
+    completed: 0,
+  })
+
+  useEffect(() => {
+    fetchWorkflows()
+  }, [])
+
+  useEffect(() => {
+    filterWorkflows()
+  }, [workflows, searchTerm, statusFilter])
+
+  const fetchWorkflows = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("workflows")
+        .select(`
+          *,
+          clients (name)
+        `)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      setWorkflows(data || [])
+
+      // Calculate stats
+      const total = data?.length || 0
+      const inProgress = data?.filter((w) => w.status === "Dalam Proses").length || 0
+      const review = data?.filter((w) => w.status === "Menunggu Review").length || 0
+      const completed = data?.filter((w) => w.status === "Selesai").length || 0
+
+      setStats({ total, inProgress, review, completed })
+    } catch (error) {
+      console.error("Error fetching workflows:", error)
+      toast({ title: "Gagal memuat data workflow", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterWorkflows = () => {
+    let filtered = workflows
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (workflow) =>
+          workflow.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          workflow.clients.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          workflow.category.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((workflow) => {
+        switch (statusFilter) {
+          case "in-progress":
+            return workflow.status === "Dalam Proses"
+          case "review":
+            return workflow.status === "Menunggu Review"
+          case "completed":
+            return workflow.status === "Selesai"
+          default:
+            return true
+        }
+      })
+    }
+
+    setFilteredWorkflows(filtered)
+  }
+
+  const handleEdit = (workflow: WorkflowData) => {
+    setSelectedWorkflow(workflow)
+    setDialogOpen(true)
+  }
+
+  const handleView = (workflow: WorkflowData) => {
+    // Implement view functionality
+    toast({ title: `Melihat workflow: ${workflow.title}` })
+  }
+
+  const handleDownload = (workflow: WorkflowData) => {
+    // Implement download functionality
+    toast({ title: `Mengunduh workflow: ${workflow.title}` })
+  }
 
   const getStatusBadge = (status: string) => {
     const config = {
-      "In Progress": { variant: "default" as const, className: "bg-blue-100 text-blue-800" },
-      Completed: { variant: "default" as const, className: "bg-green-100 text-green-800" },
-      Pending: { variant: "secondary" as const, className: "bg-yellow-100 text-yellow-800" },
-      Delayed: { variant: "destructive" as const },
+      "Dalam Proses": { variant: "default" as const, className: "bg-blue-100 text-blue-800" },
+      "Menunggu Review": { variant: "secondary" as const, className: "bg-yellow-100 text-yellow-800" },
+      Selesai: { variant: "default" as const, className: "bg-green-100 text-green-800" },
     }
 
     const { variant, className } = config[status as keyof typeof config]
@@ -190,22 +151,49 @@ export default function WorkflowPage() {
     const { variant, className } = config[priority as keyof typeof config]
     return (
       <Badge variant={variant} className={className}>
-        {priority}
+        {priority === "High" ? "Tinggi" : priority === "Medium" ? "Sedang" : "Rendah"}
       </Badge>
     )
   }
 
-  const getStepStatusIcon = (status: string) => {
-    switch (status) {
-      case "Completed":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
-      case "In Progress":
-        return <Play className="h-4 w-4 text-blue-600" />
-      case "Pending":
-        return <Clock className="h-4 w-4 text-gray-400" />
-      default:
-        return <Clock className="h-4 w-4 text-gray-400" />
-    }
+  const workflowStats = [
+    {
+      title: "Total Workflow",
+      value: stats.total.toString(),
+      change: "workflow aktif",
+      icon: Workflow,
+    },
+    {
+      title: "Dalam Proses",
+      value: stats.inProgress.toString(),
+      change: "sedang dikerjakan",
+      icon: Clock,
+    },
+    {
+      title: "Menunggu Review",
+      value: stats.review.toString(),
+      change: "perlu review",
+      icon: AlertTriangle,
+    },
+    {
+      title: "Selesai",
+      value: stats.completed.toString(),
+      change: "telah diselesaikan",
+      icon: CheckCircle,
+    },
+  ]
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-2 text-muted-foreground">Loading workflows...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -221,9 +209,14 @@ export default function WorkflowPage() {
             <Settings className="mr-2 h-4 w-4" />
             Template
           </Button>
-          <Button>
+          <Button
+            onClick={() => {
+              setSelectedWorkflow(null)
+              setDialogOpen(true)
+            }}
+          >
             <Plus className="mr-2 h-4 w-4" />
-            Buat Workflow
+            Tambah Lembar Kerja
           </Button>
         </div>
       </div>
@@ -247,221 +240,102 @@ export default function WorkflowPage() {
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Workflow Templates */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Template Workflow</CardTitle>
-            <CardDescription>Template siap pakai untuk berbagai proses</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {workflowTemplates.map((template) => (
-                <div
-                  key={template.id}
-                  className={`p-3 border rounded-lg cursor-pointer transition-colors hover:bg-muted/50 ${
-                    selectedWorkflow === template.id ? "border-primary bg-primary/5" : ""
-                  }`}
-                  onClick={() => setSelectedWorkflow(template.id)}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm">{template.name}</h4>
-                      <Badge variant="outline" className="text-xs">
-                        {template.category}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{template.description}</p>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{template.steps} langkah</span>
-                      <span>{template.estimatedTime}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Workflow Steps */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Detail Workflow: SPT PPh 21</CardTitle>
-            <CardDescription>Langkah-langkah dalam workflow yang dipilih</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {workflowSteps.map((step, index) => (
-                <div key={step.id} className="flex items-start space-x-4">
-                  <div className="flex flex-col items-center">
-                    {getStepStatusIcon(step.status)}
-                    {index < workflowSteps.length - 1 && <div className="w-px h-8 bg-border mt-2"></div>}
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium">{step.name}</h4>
-                      <div className="flex items-center space-x-2">
-                        {getStatusBadge(step.status)}
-                        <span className="text-xs text-muted-foreground">{step.duration}</span>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                    <p className="text-xs text-muted-foreground">Assignee: {step.assignee}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Active Workflows */}
+      {/* Workflows Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Workflow Aktif</CardTitle>
-          <CardDescription>Workflow yang sedang berjalan untuk berbagai klien</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Daftar Lembar Kerja</CardTitle>
+              <CardDescription>Kelola semua lembar kerja workflow</CardDescription>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Input
+                placeholder="Cari workflow..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-64"
+              />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="active" className="space-y-4">
+          <Tabs value={statusFilter} onValueChange={setStatusFilter} className="space-y-4">
             <TabsList>
-              <TabsTrigger value="active">Aktif</TabsTrigger>
+              <TabsTrigger value="all">Semua</TabsTrigger>
+              <TabsTrigger value="in-progress">Dalam Proses</TabsTrigger>
+              <TabsTrigger value="review">Menunggu Review</TabsTrigger>
               <TabsTrigger value="completed">Selesai</TabsTrigger>
-              <TabsTrigger value="delayed">Terlambat</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="active" className="space-y-4">
-              {activeWorkflows.map((workflow) => (
-                <div
-                  key={workflow.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <h4 className="font-medium">{workflow.client}</h4>
-                      {getPriorityBadge(workflow.priority)}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{workflow.workflow}</p>
-                    <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                      <div className="flex items-center">
-                        <Users className="mr-1 h-3 w-3" />
-                        {workflow.assignee}
-                      </div>
-                      <div className="flex items-center">
-                        <Clock className="mr-1 h-3 w-3" />
-                        Due: {new Date(workflow.dueDate).toLocaleDateString("id-ID")}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span>Current: {workflow.currentStep}</span>
-                        <span>{workflow.progress}%</span>
-                      </div>
-                      <Progress value={workflow.progress} className="h-2 w-64" />
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    {getStatusBadge(workflow.status)}
-                    <div className="flex items-center space-x-1">
-                      <Button variant="ghost" size="icon">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon">
-                        <Play className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon">
-                        <Pause className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </TabsContent>
+            <TabsContent value={statusFilter} className="space-y-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Judul</TableHead>
+                    <TableHead>Klien</TableHead>
+                    <TableHead>Kategori</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Prioritas</TableHead>
+                    <TableHead>Progress</TableHead>
+                    <TableHead>Assignee</TableHead>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead>Aksi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredWorkflows.map((workflow) => (
+                    <TableRow key={workflow.id}>
+                      <TableCell className="font-medium">{workflow.title}</TableCell>
+                      <TableCell>{workflow.clients.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{workflow.category}</Badge>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(workflow.status)}</TableCell>
+                      <TableCell>{getPriorityBadge(workflow.priority)}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>{workflow.progress}%</span>
+                          </div>
+                          <Progress value={workflow.progress} className="h-2 w-16" />
+                        </div>
+                      </TableCell>
+                      <TableCell>{workflow.assignee || "-"}</TableCell>
+                      <TableCell>
+                        {workflow.due_date ? new Date(workflow.due_date).toLocaleDateString("id-ID") : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleView(workflow)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(workflow)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDownload(workflow)}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-            <TabsContent value="completed">
-              <div className="text-center py-8 text-muted-foreground">
-                Workflow yang sudah selesai akan ditampilkan di sini...
-              </div>
-            </TabsContent>
-
-            <TabsContent value="delayed">
-              <div className="text-center py-8 text-muted-foreground">
-                Workflow yang terlambat akan ditampilkan di sini...
-              </div>
+              {filteredWorkflows.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">Tidak ada workflow yang ditemukan</div>
+              )}
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
-      {/* Workflow Analytics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Efisiensi Workflow</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Rata-rata Completion Time</span>
-                <span className="font-medium">3.2 hari</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">On-time Completion Rate</span>
-                <span className="font-medium text-green-600">85%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Bottleneck Terbanyak</span>
-                <span className="font-medium">Review Dokumen</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Team Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Ahmad Wijaya</span>
-                <span className="font-medium">12 workflows</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Siti Rahayu</span>
-                <span className="font-medium">8 workflows</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm">Budi Santoso</span>
-                <span className="font-medium">6 workflows</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Upcoming Deadlines</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium">PT Teknologi Maju</p>
-                  <p className="text-xs text-muted-foreground">SPT PPh 21</p>
-                </div>
-                <span className="text-sm text-orange-600">7 hari</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-medium">CV Berkah Jaya</p>
-                  <p className="text-xs text-muted-foreground">SPT PPN</p>
-                </div>
-                <span className="text-sm text-blue-600">12 hari</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <WorkflowDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        workflow={selectedWorkflow}
+        onSuccess={fetchWorkflows}
+      />
     </div>
   )
 }
